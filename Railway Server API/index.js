@@ -3,36 +3,30 @@ const axios = require('axios');
 const app = express();
 const port = 3000;
 
-// Function to fetch data from John Doe Railways API
-// Function to fetch data from John Doe Railways API with an authentication token
-async function fetchTrainData() {
+async function fetchDataWithToken(token) {
   try {
     const response = await axios.get('http://20.244.56.144/train/trains', {
       headers: {
-        Authorization: `Bearer }` // Assuming Bearer token authentication
+        Authorization: `Bearer ${token}`
       }
     });
     return response.data;
   } catch (error) {
-    console.error('Error fetching train data:', error);
+    console.error('Error fetching data:', error);
     return [];
   }
 }
 
-
-// Function to calculate adjusted departure time considering delays
 function calculateAdjustedDepartureTime(departureTime, delayMinutes) {
   const departureTimestamp = new Date(departureTime).getTime();
   const adjustedDepartureTimestamp = departureTimestamp + delayMinutes * 60 * 1000;
   return new Date(adjustedDepartureTimestamp);
 }
 
-// API endpoint to get train schedules
 app.get('/trains', async (req, res) => {
   try {
-    // assuming i am taking token in body
-    let token=req.data.token
-    const trainData = await fetchTrainData(token);
+    const userToken = req.headers.authorization.split(' ')[1];
+    const trainData = await fetchDataWithToken(userToken);
 
     const currentTime = new Date();
     const filteredTrains = trainData.filter(train => {
@@ -42,7 +36,6 @@ app.get('/trains', async (req, res) => {
     });
 
     const sortedTrains = filteredTrains.sort((a, b) => {
-      // Sort criteria: Price (ascending), Tickets (descending), Departure time (descending)
       if (a.price !== b.price) {
         return a.price - b.price;
       } else if (a.availableTickets !== b.availableTickets) {
@@ -56,7 +49,7 @@ app.get('/trains', async (req, res) => {
 
     res.json(sortedTrains);
   } catch (error) {
-    console.error('Error processing train data:', error);
+    console.error('Error processing data:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });

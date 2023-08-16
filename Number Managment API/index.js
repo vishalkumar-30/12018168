@@ -1,39 +1,59 @@
 const express = require('express');
 const axios = require('axios');
-
 const app = express();
 const port = 3000;
 
-app.get('/numbers', async (req, res) => {
+async function fetchDataWithToken(token) {
   try {
-    const urls = req.query.url || [];
-    if (!Array.isArray(urls)) {
-      return res.status(400).json({ error: 'Invalid query parameter format' });
-    }
+    const response = await axios.get('http://20.244.56.144/train/trains', {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error while retrieving data:', error);
+    return [];
+  }
+}
 
-    const promises = urls.map(async url => {
-      try {
-        const response = await axios.get(url, { timeout: 500 }); // Set timeout to 500 milliseconds
-        return response.data.numbers || [];
-      } catch (error) {
-        return [];
+function calculateAdjustedDepartureTime(departureTime, delayMinutes) {
+  const departureTimestamp = new Date(departureTime).getTime();
+  const adjustedDepartureTimestamp = departureTimestamp + delayMinutes * 60 * 1000;
+  return new Date(adjustedDepartureTimestamp);
+}
+
+app.get('/trains', async (req, res) => {
+  try {
+    const userToken = req.headers.authorization.split(' ')[1];
+    const trainData = await fetchDataWithToken(userToken);
+
+    const currentTime = new Date();
+    const upcomingTrains = trainData.filter(train => {
+      const departureTime = new Date(train.departureTime);
+      const timeDifference = departureTime - currentTime;
+      return timeDifference > 30 * 60 * 1000; // Trains departing in more than 30 minutes
+    });
+
+    const sortedTrains = upcomingTrains.sort((a, b) => {
+      if (a.price !== b.price) {
+        return a.price - b.price;
+      } else if (a.availableTickets !== b.availableTickets) {
+        return b.availableTickets - a.availableTickets;
+      } else {
+        const aAdjustedDeparture = calculateAdjustedDepartureTime(a.departureTime, a.delayMinutes);
+        const bAdjustedDeparture = calculateAdjustedDepartureTime(b.departureTime, b.delayMinutes);
+        return bAdjustedDeparture - aAdjustedDeparture;
       }
     });
 
-    const responses = await Promise.all(promises);
-
-    const mergedNumbers = responses.reduce((acc, numbers) => {
-      return acc.concat(numbers);
-    }, []);
-
-    const uniqueSortedNumbers = Array.from(new Set(mergedNumbers)).sort((a, b) => a - b);
-
-    res.json({ numbers: uniqueSortedNumbers });
+    res.json(sortedTrains);
   } catch (error) {
+    console.error('Error while processing data:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });
 
 app.listen(port, () => {
-  console.log(`number-management-service listening at http://localhost:${port}`);
+  console.log(`Server is up and running on port ${port}`);
 });
